@@ -21,6 +21,7 @@ source-repository head
 
 executable segfault
   main-is: Main.hs
+  ghc-options: -rtsopts
   hs-source-dirs:
       app
   build-depends:

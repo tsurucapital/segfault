@@ -34,18 +34,11 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
 data ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) {-# UNPACK #-} !Int {-# UNPACK #-} !Int
 
 instance Show ByteString where
-  showsPrec p ps r = showsPrec p (unpackAppendCharsLazy ps []) r
+  showsPrec p ps r = showsPrec p (unpackAppendCharsStrict ps []) r
 
 {-# INLINE accursedUnutterablePerformIO #-}
 accursedUnutterablePerformIO :: IO a -> a
 accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
-
-unpackAppendCharsLazy :: ByteString -> [Char] -> [Char]
-unpackAppendCharsLazy (PS fp off len) cs
-  | len <= 100 = unpackAppendCharsStrict (PS fp off len) cs
-  | otherwise  = unpackAppendCharsStrict (PS fp off 100) remainder
-  where
-    remainder  = unpackAppendCharsLazy (PS fp (off+100) (len-100)) cs
 
 unpackAppendCharsStrict :: ByteString -> [Char] -> [Char]
 unpackAppendCharsStrict (PS fp off len) xs =

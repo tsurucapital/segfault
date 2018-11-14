@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wall -ddump-simpl -dsuppress-ticks -ddump-to-file #-}
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Internal as BSI
+import qualified Data.ByteString as BS
 
 showIntegerZeros :: Int -> Integer -> String
 showIntegerZeros digits a = replicate (digits - length s) '0' ++ s where
@@ -24,8 +24,9 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
 {-# NOINLINE showFixed #-}
 -- doesn't crash when inlined
 
-packCStringLen :: IO ByteString
-packCStringLen = BSI.create bufsize $ \_ -> return ()
+packCStringLen :: Int -> IO ByteString
+packCStringLen bz = return $ BS.replicate bz 44
+{-# NOINLINE packCStringLen #-}
 
 instance Show TimeOfDay where
     show (TimeOfDay s) = showFixed s
@@ -35,7 +36,7 @@ bufsize = 8192
 
 readFromPtr :: IO ByteString
 readFromPtr = do
-    bs <- packCStringLen
+    bs <- packCStringLen bufsize
     print bs -- required
     return bs
 

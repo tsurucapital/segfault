@@ -3,7 +3,6 @@
 
 import Data.ByteString (ByteString, packCStringLen)
 
-import Control.Monad.Trans (lift, MonadTrans(..))
 import Control.Monad.IO.Class (liftIO, MonadIO(..))
 import Control.Monad
 import Foreign.Marshal.Alloc (mallocBytes)
@@ -72,9 +71,8 @@ decodePcap = eneeCheckIfDone (liftI . go)
     where
         go k c = eneeCheckIfDone (liftI . go) (k [(TimeOfDay 0, c)])
 
--- needs to be a typeclass
-instance Monoid s => MonadTrans (Iteratee s) where
-  lift m = Iteratee $ \onDone _ -> m >>= flip onDone (mempty)
+lift :: (Monoid s, Monad m) => m a -> Iteratee s m a
+lift m = Iteratee $ \onDone _ -> m >>= flip onDone (mempty)
 
 instance (Functor m, Monad m) => Functor (Iteratee s m) where
   fmap f m = Iteratee $ \onDone onCont ->

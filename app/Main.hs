@@ -36,13 +36,6 @@ data ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) {-# UNPACK #-} !Int {-# 
 instance Show ByteString where
   showsPrec p ps r = showsPrec p (unpackAppendCharsLazy ps []) r
 
-instance Semigroup ByteString where
-  (<>) = undefined
-
-instance Monoid ByteString where
-  mempty = undefined
-  mappend = undefined
-
 {-# INLINE accursedUnutterablePerformIO #-}
 accursedUnutterablePerformIO :: IO a -> a
 accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
@@ -87,21 +80,18 @@ readFromPtr = do
 type Enumerator s a = Iteratee s a -> IO (Iteratee s a)
 
 newtype Iteratee s a = Iteratee { runIter :: forall r.
-          (a -> s -> IO r) ->
+          (a -> IO r) ->
           ((s -> Iteratee s a) -> IO r) ->
           IO r}
 
-enumFromCallbackCatch :: (Monoid s) => IO s -> Enumerator s a
+enumFromCallbackCatch :: IO s -> Enumerator s a
 enumFromCallbackCatch c = loop
   where
-    loop iter = runIter iter (\a b -> return $ idone a b) onCont
+    loop iter = runIter iter (\a -> return $ pure a) onCont
     onCont k = c >>= loop . k
 
-idone :: a -> s -> Iteratee s a
-idone a s = Iteratee $ \onDone _ -> onDone a s
-
 eneeCheckIfDone f inner = Iteratee $ \od oc ->
-  let onDone x s = od (idone x s) (mempty)
+  let onDone x = od (pure x)
       onCont k = runIter (f k) od oc
   in runIter inner onDone onCont
 
@@ -115,8 +105,8 @@ decodePcap = eneeCheckIfDone (liftI . go)
     where
         go k c = eneeCheckIfDone (liftI . go) (k [(TimeOfDay 0, c)])
 
-lift :: (Monoid s) => IO a -> Iteratee s a
-lift m = Iteratee $ \onDone _ -> m >>= flip onDone (mempty)
+lift :: IO a -> Iteratee s a
+lift m = Iteratee $ \onDone _ -> m >>= onDone
 
 instance Functor (Iteratee s) where
   fmap f m = Iteratee $ \onDone onCont ->
@@ -124,20 +114,19 @@ instance Functor (Iteratee s) where
         oc = onCont . (fmap f .)
     in runIter m od oc
 
-instance (Monoid s) => Applicative (Iteratee s) where
-    pure x  = idone x mempty
+instance Applicative (Iteratee s) where
+    pure = return
     m <*> a = m >>= flip fmap a
 
-instance (Monoid s) => Monad (Iteratee s) where
-  return x = Iteratee $ \onDone _ -> onDone x (mempty)
+instance Monad (Iteratee s) where
+  return x = Iteratee $ \onDone _ -> onDone x
   (>>=) = bindIteratee
 
-bindIteratee :: (Monoid s) => Iteratee s a -> (a -> Iteratee s b) -> Iteratee s b
+bindIteratee :: Iteratee s a -> (a -> Iteratee s b) -> Iteratee s b
 bindIteratee = self
     where
         self m f = Iteratee $ \onDone onCont ->
-             let m_done a stream = runIter (f a) (const . flip onDone stream) f_cont
-                   where f_cont k = runIter (k stream) onDone onCont
+             let m_done a = runIter (f a) onDone onCont
              in runIter m m_done (onCont . (flip self f .))
 
 mapMI_ :: (el -> IO b) -> Iteratee [el] ()

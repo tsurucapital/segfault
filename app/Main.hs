@@ -1,13 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall -ddump-simpl -dsuppress-ticks -ddump-to-file #-}
 
-import Data.ByteString (ByteString, packCStringLen)
-
-import Control.Monad
-import Foreign.Marshal.Alloc (mallocBytes)
-import Foreign.Ptr (Ptr, castPtr)
-import Foreign.Storable (pokeElemOff)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Internal as BSI
 
 showIntegerZeros :: Int -> Integer -> String
 showIntegerZeros digits a = replicate (digits - length s) '0' ++ s where
@@ -28,15 +24,18 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
 {-# NOINLINE showFixed #-}
 -- doesn't crash when inlined
 
+packCStringLen :: IO ByteString
+packCStringLen = BSI.create bufsize $ \_ -> return ()
+
 instance Show TimeOfDay where
     show (TimeOfDay s) = showFixed s
 
 bufsize :: Int
 bufsize = 8192
 
-readFromPtr :: Ptr a -> IO ByteString
-readFromPtr buf = do
-    bs <- packCStringLen (castPtr buf, bufsize)
+readFromPtr :: IO ByteString
+readFromPtr = do
+    bs <- packCStringLen
     print bs -- required
     return bs
 
@@ -104,7 +103,5 @@ mapMI_ f = liftI step
 
 main :: IO ()
 main = do
-  p <- mallocBytes bufsize
-  forM_ [0..1023] $ \i -> pokeElemOff (castPtr p) i i
-  _ <- enumFromCallbackCatch (readFromPtr p) $ decodePcap (mapMI_ print)
+  _ <- enumFromCallbackCatch readFromPtr $ decodePcap (mapMI_ print)
   pure ()

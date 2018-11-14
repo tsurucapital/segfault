@@ -87,11 +87,11 @@ newtype Iteratee s a = Iteratee { runIter :: forall r.
 enumFromCallbackCatch :: IO s -> Enumerator s a
 enumFromCallbackCatch c = loop
   where
-    loop iter = runIter iter (\a -> return $ pure a) onCont
+    loop iter = runIter iter (\a -> return $ pureI a) onCont
     onCont k = c >>= loop . k
 
 eneeCheckIfDone f inner = Iteratee $ \od oc ->
-  let onDone x = od (pure x)
+  let onDone x = od (pureI x)
       onCont k = runIter (f k) od oc
   in runIter inner onDone onCont
 
@@ -108,19 +108,8 @@ decodePcap = eneeCheckIfDone (liftI . go)
 lift :: IO a -> Iteratee s a
 lift m = Iteratee $ \onDone _ -> m >>= onDone
 
-instance Functor (Iteratee s) where
-  fmap f m = Iteratee $ \onDone onCont ->
-    let od = onDone . f
-        oc = onCont . (fmap f .)
-    in runIter m od oc
-
-instance Applicative (Iteratee s) where
-    pure = return
-    m <*> a = m >>= flip fmap a
-
-instance Monad (Iteratee s) where
-  return x = Iteratee $ \onDone _ -> onDone x
-  (>>=) = bindIteratee
+pureI :: a -> Iteratee s a
+pureI x = Iteratee $ \onDone _ -> onDone x
 
 bindIteratee :: Iteratee s a -> (a -> Iteratee s b) -> Iteratee s b
 bindIteratee = self
@@ -133,7 +122,7 @@ mapMI_ :: (el -> IO b) -> Iteratee [el] ()
 mapMI_ f = liftI step
   where
     step [] = liftI step -- required
-    step xs = lift (mapM_ f xs) >> liftI step
+    step xs = bindIteratee (lift (mapM_ f xs)) $ const $ liftI step
 
 main :: IO ()
 main = do

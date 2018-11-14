@@ -25,6 +25,4 @@ executable segfault
       app
   build-depends:
       base
-    , bytestring
-    , mtl
   default-language: Haskell2010

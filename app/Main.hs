@@ -1,9 +1,16 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MagicHash, UnboxedTuples #-}
 {-# OPTIONS_GHC -Wall -ddump-simpl -dsuppress-ticks -ddump-to-file #-}
 
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as BS
+import Foreign.ForeignPtr
+import Foreign.Ptr
+import GHC.ForeignPtr
+import GHC.Base (realWorld#)
+import Data.Word (Word8)
+import Foreign.Storable (peek)
+import GHC.IO
 
 showIntegerZeros :: Int -> Integer -> String
 showIntegerZeros digits a = replicate (digits - length s) '0' ++ s where
@@ -24,8 +31,46 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
 {-# NOINLINE showFixed #-}
 -- doesn't crash when inlined
 
+data ByteString = PS {-# UNPACK #-} !(ForeignPtr Word8) {-# UNPACK #-} !Int {-# UNPACK #-} !Int
+
+instance Show ByteString where
+  showsPrec p ps r = showsPrec p (unpackAppendCharsLazy ps []) r
+
+instance Semigroup ByteString where
+  (<>) = undefined
+
+instance Monoid ByteString where
+  mempty = undefined
+  mappend = undefined
+
+{-# INLINE accursedUnutterablePerformIO #-}
+accursedUnutterablePerformIO :: IO a -> a
+accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
+
+unpackAppendCharsLazy :: ByteString -> [Char] -> [Char]
+unpackAppendCharsLazy (PS fp off len) cs
+  | len <= 100 = unpackAppendCharsStrict (PS fp off len) cs
+  | otherwise  = unpackAppendCharsStrict (PS fp off 100) remainder
+  where
+    remainder  = unpackAppendCharsLazy (PS fp (off+100) (len-100)) cs
+
+unpackAppendCharsStrict :: ByteString -> [Char] -> [Char]
+unpackAppendCharsStrict (PS fp off len) xs =
+    accursedUnutterablePerformIO $ withForeignPtr fp $ \base ->
+      loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
+  where
+    loop !sentinal !p acc
+      | p == sentinal = return acc
+      | otherwise     = do x <- peek p
+                           loop sentinal (p `plusPtr` (-1)) (w2c x:acc)
+
+w2c :: Word8 -> Char
+w2c = toEnum . fromEnum
+
 packCStringLen :: Int -> IO ByteString
-packCStringLen bz = return $ BS.replicate bz 44
+packCStringLen l = do
+  fp <- mallocPlainForeignPtrBytes l
+  return $! PS fp 0 l
 {-# NOINLINE packCStringLen #-}
 
 instance Show TimeOfDay where
@@ -37,8 +82,7 @@ bufsize = 8192
 readFromPtr :: IO ByteString
 readFromPtr = do
     bs <- packCStringLen bufsize
-    print bs -- required
-    return bs
+    length (show bs) `seq` return bs
 
 type Enumerator s a = Iteratee s a -> IO (Iteratee s a)
 
@@ -104,5 +148,6 @@ mapMI_ f = liftI step
 
 main :: IO ()
 main = do
-  _ <- enumFromCallbackCatch readFromPtr $ decodePcap (mapMI_ print)
+  _ <- enumFromCallbackCatch readFromPtr $ decodePcap
+    $ mapMI_ $ \(t, bs) -> print (t, bs)
   pure ()

@@ -21,8 +21,6 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
     -- read floors, so show must ceil for `read . show = id` to hold. See #9240
     fracNum = divCeil (d * maxnum) res
     divCeil x y = (x + y - 1) `div` y
-{-# NOINLINE showFixed #-}
--- doesn't crash when inlined
 
 packCStringLen :: Int -> IO ByteString
 packCStringLen bz = return $ BS.replicate bz 44

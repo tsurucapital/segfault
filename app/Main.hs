@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -Wall -ddump-simpl -dsuppress-ticks -ddump-to-file #-}
+{-# OPTIONS_GHC -Wall -O #-}
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -22,9 +22,9 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
     fracNum = divCeil (d * maxnum) res
     divCeil x y = (x + y - 1) `div` y
 
-packCStringLen :: Int -> IO ByteString
-packCStringLen bz = return $ BS.replicate bz 44
-{-# NOINLINE packCStringLen #-}
+newBS :: Int -> IO ByteString
+newBS bz = return $ BS.replicate bz 44
+{-# NOINLINE newBS #-}
 
 instance Show TimeOfDay where
     show (TimeOfDay s) = showFixed s
@@ -32,9 +32,9 @@ instance Show TimeOfDay where
 bufsize :: Int
 bufsize = 8192
 
-readFromPtr :: IO ByteString
-readFromPtr = do
-    bs <- packCStringLen bufsize
+newBS1 :: IO ByteString
+newBS1 = do
+    bs <- newBS bufsize
     print bs -- required
     return bs
 
@@ -64,8 +64,8 @@ type Enumeratee sFrom sTo a = Iteratee sTo a -> Iteratee sFrom (Iteratee sTo a)
 liftI :: (s -> Iteratee s a) -> Iteratee s a
 liftI k = Iteratee $ \_ onCont -> onCont k
 
-decodePcap :: Enumeratee ByteString [(TimeOfDay, ByteString)] a
-decodePcap = eneeCheckIfDone (liftI . go)
+addTime :: Enumeratee ByteString [(TimeOfDay, ByteString)] a
+addTime = eneeCheckIfDone (liftI . go)
     where
         go k c = eneeCheckIfDone (liftI . go) (k [(TimeOfDay 0, c)])
 
@@ -102,5 +102,5 @@ mapMI_ f = liftI step
 
 main :: IO ()
 main = do
-  _ <- enumFromCallbackCatch readFromPtr $ decodePcap (mapMI_ print)
+  _ <- enumFromCallbackCatch newBS1 $ addTime (mapMI_ print)
   pure ()

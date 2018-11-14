@@ -14,7 +14,7 @@ showIntegerZeros :: Int -> Integer -> String
 showIntegerZeros digits a = replicate (digits - length s) '0' ++ s where
     s = show a
 
-data TimeOfDay = TimeOfDay Int Int Integer
+newtype TimeOfDay = TimeOfDay Integer
 
 showFixed :: Integer -> String
 showFixed a = show i ++ showIntegerZeros digits fracNum where
@@ -30,7 +30,7 @@ showFixed a = show i ++ showIntegerZeros digits fracNum where
 -- doesn't crash when inlined
 
 instance Show TimeOfDay where
-    show (TimeOfDay h m s) = show h ++ show m ++ showFixed s
+    show (TimeOfDay s) = showFixed s
 
 bufsize :: Int
 bufsize = 8192
@@ -70,7 +70,7 @@ liftI k = Iteratee $ \_ onCont -> onCont k
 decodePcap :: Enumeratee ByteString [(TimeOfDay, ByteString)] IO a
 decodePcap = eneeCheckIfDone (liftI . go)
     where
-        go k c = eneeCheckIfDone (liftI . go) (k [(TimeOfDay 0 0 0, c)])
+        go k c = eneeCheckIfDone (liftI . go) (k [(TimeOfDay 0, c)])
 
 -- needs to be a typeclass
 instance Monoid s => MonadTrans (Iteratee s) where

@@ -3,7 +3,6 @@
 
 import Data.ByteString (ByteString, packCStringLen)
 
-import Control.Monad.IO.Class (liftIO, MonadIO(..))
 import Control.Monad
 import Foreign.Marshal.Alloc (mallocBytes)
 import Foreign.Ptr (Ptr, castPtr)
@@ -34,10 +33,10 @@ instance Show TimeOfDay where
 bufsize :: Int
 bufsize = 8192
 
-readFromPtr :: MonadIO m => Ptr a -> m ByteString
+readFromPtr :: Ptr a -> IO ByteString
 readFromPtr buf = do
-    bs <- liftIO $ packCStringLen (castPtr buf, bufsize)
-    liftIO $ print bs -- required
+    bs <- packCStringLen (castPtr buf, bufsize)
+    print bs -- required
     return bs
 
 type Enumerator s m a = Iteratee s m a -> m (Iteratee s m a)
